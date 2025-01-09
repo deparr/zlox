@@ -1,8 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Lexer = @This();
-
 pub const Token = struct {
     loc: Loc,
     tag: Tag = .invalid,
@@ -16,22 +14,22 @@ pub const Token = struct {
 
     pub const Tag = enum {
         // keywords
-        kw_and,
-        kw_class,
-        kw_else,
-        kw_false,
-        kw_fun,
-        kw_for,
-        kw_if,
-        kw_nil,
-        kw_or,
-        kw_print,
-        kw_return,
-        kw_super,
-        kw_this,
-        kw_true,
-        kw_var,
-        kw_while,
+        keyword_and,
+        keyword_class,
+        keyword_else,
+        keyword_false,
+        keyword_fun,
+        keyword_for,
+        keyword_if,
+        keyword_nil,
+        keyword_or,
+        keyword_print,
+        keyword_return,
+        keyword_super,
+        keyword_this,
+        keyword_true,
+        keyword_var,
+        keyword_while,
 
         // operators
         bang,
@@ -73,96 +71,218 @@ pub const Token = struct {
                 else => return self,
             }
         }
+
+        pub fn lexeme(self: Tag) []const u8 {
+            return switch(self) {
+                .keyword_and => "and",
+                .keyword_class => "class",
+                .keyword_else => "else",
+                .keyword_false => "false",
+                .keyword_fun => "fun",
+                .keyword_for => "for",
+                .keyword_if => "if",
+                .keyword_nil => "nil",
+                .keyword_or => "or",
+                .keyword_print => "print",
+                .keyword_return => "return",
+                .keyword_super => "super",
+                .keyword_this => "this",
+                .keyword_true => "true",
+                .keyword_var => "var",
+                .keyword_while => "while",
+
+                // operators
+                .bang => "!",
+                .bang_equal => "!=",
+                .equal => "=",
+                .equal_equal => "==",
+                .greater => ">",
+                .greater_equal => ">=",
+                .less => "<",
+                .less_equal => "<=",
+                .plus => "+",
+                .minus => "-",
+                .star => "*",
+                .slash => "/",
+
+                // delimiters
+                .left_paren => "(",
+                .right_paren => ")",
+                .left_brace => "{",
+                .right_brace => "}",
+                .comma => ",",
+                .dot => ".",
+                .semicolon => ";",
+
+                // literals
+                .identifier => "(ident)",
+                .string => "(string)",
+                .number => "(number)",
+
+                .invalid => "invalid",
+                .eof => "(eof)",
+            };
+        }
     };
+
+    pub const keywords = std.StaticStringMap(Tag).initComptime(.{
+        .{ "and", .keyword_and },
+        .{ "class", .keyword_class },
+        .{ "else", .keyword_else },
+        .{ "false", .keyword_false },
+        .{ "fun", .keyword_fun },
+        .{ "for", .keyword_for },
+        .{ "if", .keyword_if },
+        .{ "nil", .keyword_nil },
+        .{ "or", .keyword_or },
+        .{ "print", .keyword_print },
+        .{ "return", .keyword_return },
+        .{ "super", .keyword_super },
+        .{ "this", .keyword_this },
+        .{ "true", .keyword_true },
+        .{ "var", .keyword_var },
+        .{ "while", .keyword_while },
+    });
+
+    pub fn getKeyword(str: []const u8) ?Tag {
+        return keywords.get(str);
+    }
 };
 
-source: []const u8 = undefined,
+pub const Lexer = struct {
+    index: usize = 0,
+    line: usize = 1,
+    source: []const u8 = undefined,
 
-pub fn init(src: []const u8) Lexer {
-    return Lexer{ .source = src };
-}
+    pub fn init(src: []const u8) Lexer {
+        return Lexer{ .source = src, .index = 0, .line = 1 };
+    }
 
-pub fn lexAlloc(self: *Lexer, ally: Allocator) []Token {
-    _ = self;
-    _ = ally;
-    return undefined;
-}
 
-const State = enum {
-    start,
-    maybe_equal,
-    slash,
-    string,
-    int,
-    int_dot,
-    float,
-};
+    pub fn atEnd(self: *Lexer) bool {
+        return self.index >= self.source.len;
+    }
 
-pub fn lex(src: []const u8, tokens: *std.ArrayList(Token)) !*std.ArrayList(Token) {
-    var current: usize = 0;
-    var line: usize = 1;
+    inline fn at(self: Lexer) u8 {
+        if (self.index >= self.source.len) {
+            return 0;
+        }
+        return self.source[self.index];
+    }
 
-    loop: while (current < src.len) {
-        var result: Token = .{
-            .loc = . {
-                .start = current,
-                .line = line,
-            },
-        };
-        blk: switch (State.start) {
+    const State = enum {
+        start,
+        maybe_equal,
+        slash,
+        string,
+        comment,
+        int,
+        int_dot,
+        float,
+        identifier,
+    };
+
+    pub fn next(self: *Lexer) ?Token {
+        var result: Token = .{ .loc = .{
+            .start = self.index,
+            .line = self.line,
+        } };
+
+        lexing: switch (State.start) {
             .start => {
-                switch (src[current]) {
+                switch (self.at()) {
                     // todo this isnt correct start pos
+                    0 => return null,
                     ' ', '\r', '\t', '\n' => {
-                        if (src[current] == '\n')
-                            line += 1;
-                            result.loc.line += 1;
-                        current += 1;
+                        if (self.at() == '\n')
+                            self.line += 1;
+                        result.loc.line += 1;
+                        self.index += 1;
                         result.loc.start += 1;
-                        continue :blk .start;
+                        continue :lexing .start;
                     },
 
-                    '(' => result.tag = .left_paren,
-                    ')' => result.tag = .right_paren,
-                    '{' => result.tag = .left_brace,
-                    '}' => result.tag = .right_brace,
-                    ',' => result.tag = .comma,
-                    '.' => result.tag = .dot,
-                    ';' => result.tag = .semicolon,
-                    '+' => result.tag = .plus,
-                    '-' => result.tag = .minus,
-                    '*' => result.tag = .star,
+                    '(' => {
+                        self.index += 1;
+                        result.tag = .left_paren;
+                    },
+                    ')' => {
+                        self.index += 1;
+                        result.tag = .right_paren;
+                    },
+                    '{' => {
+                        self.index += 1;
+                        result.tag = .left_brace;
+                    },
+                    '}' => {
+                        self.index += 1;
+                        result.tag = .right_brace;
+                    },
+                    ',' => {
+                        self.index += 1;
+                        result.tag = .comma;
+                    },
+                    '.' => {
+                        self.index += 1;
+                        result.tag = .dot;
+                    },
+                    ';' => {
+                        self.index += 1;
+                        result.tag = .semicolon;
+                    },
+                    '+' => {
+                        self.index += 1;
+                        result.tag = .plus;
+                    },
+                    '-' => {
+                        self.index += 1;
+                        result.tag = .minus;
+                    },
+                    '*' => {
+                        self.index += 1;
+                        result.tag = .star;
+                    },
 
                     '!' => {
+                        self.index += 1;
                         result.tag = .bang;
-                        continue :blk .maybe_equal;
+                        continue :lexing .maybe_equal;
                     },
                     '=' => {
+                        self.index += 1;
                         result.tag = .equal;
-                        continue :blk .maybe_equal;
+                        continue :lexing .maybe_equal;
                     },
                     '>' => {
+                        self.index += 1;
                         result.tag = .greater;
-                        continue :blk .maybe_equal;
+                        continue :lexing .maybe_equal;
                     },
                     '<' => {
+                        self.index += 1;
                         result.tag = .less;
-                        continue :blk .maybe_equal;
+                        continue :lexing .maybe_equal;
                     },
 
                     '/' => {
+                        self.index += 1;
                         result.tag = .slash;
-                        continue :blk .slash;
+                        continue :lexing .slash;
                     },
 
                     '"' => {
                         result.tag = .string;
-                        continue :blk .string;
+                        continue :lexing .string;
                     },
 
                     '0'...'9' => {
                         result.tag = .number;
-                        continue :blk .int;
+                        continue :lexing .int;
+                    },
+
+                    'A'...'Z', 'a'...'z', '_' => {
+                        result.tag = .identifier;
+                        continue :lexing .identifier;
                     },
 
                     else => result.tag = .invalid,
@@ -170,88 +290,119 @@ pub fn lex(src: []const u8, tokens: *std.ArrayList(Token)) !*std.ArrayList(Token
             },
 
             .maybe_equal => {
-                if (current + 1 < src.len and src[current + 1] == '=') {
-                    current += 1;
+                if (self.at() == '=') {
+                    self.index += 1;
                     result.tag = result.tag.appendEqual();
                 }
             },
 
-            // todo don't inline the loops here, use the switch states
             .slash => {
                 // check for comment...
-                if (current + 1 < src.len and src[current + 1] == '/') {
-                    current += 2;
-                    while (current < src.len and src[current] != '\n') current += 1;
+                if (self.at() == '/') {
+                    continue :lexing .comment;
+                }
+            },
 
-                    // todo better setup for this
-                    if (current >= src.len) {
-                        break :loop;
-                    }
-
-                    continue :blk .start;
+            .comment => {
+                self.index += 1;
+                switch (self.at()) {
+                    '\n', 0 => continue :lexing .start,
+                    else => continue :lexing .comment,
                 }
             },
 
             .string => {
-                current += 1;
+                self.index += 1;
 
                 // a little strange
-                while (current < src.len and src[current] != '"') {
-                    if (src[current] == '\n') {
-                        line += 1;
+                switch (self.at()) {
+                    '"' => {
+                        // end string
+                        self.index += 1;
+                    },
+                    0 => {
+                        // todo error reporting
+                        result.tag = .invalid;
+                    },
+                    '\n' => {
+                        self.line += 1;
+                        continue :lexing .string;
+                    },
+                    else => {
+                        continue :lexing .string;
                     }
-                    current += 1;
-                }
-
-                if (current >= src.len) {
-                    break :loop;
                 }
             },
 
             .int => {
-                current += 1;
+                self.index += 1;
 
-                // todo left off with this weird problem
-                if (current >= src.len) {
-                    std.debug.print("current: {s}, line: {d}, src: |{s}|\n", .{current, line, src});
-                    break :loop;
+                if (self.index >= self.source.len) {
+                    std.debug.print("self.index: {d}, line: {d}, self.source: |{s}|\n", .{ self.index, self.line, self.source });
+                    break :lexing;
                 }
-                switch (src[current]) {
-                    '0'...'9' => continue :blk .int,
-                    '.' => continue :blk .int_dot,
+
+                switch (self.source[self.index]) {
+                    '0'...'9' => continue :lexing .int,
+                    '.' => continue :lexing .int_dot,
                     else => {},
                 }
-                continue :blk .int;
             },
 
             .int_dot => {
-                if (current + 1 < src.len and std.ascii.isDigit(src[current])) {
-                    current += 1;
-                    continue :blk .float;
-                } else {
-                    // this shoudl be invalid token
+                if (self.index + 1 < self.source.len and std.ascii.isDigit(self.source[self.index + 1])) {
+                    continue :lexing .float;
                 }
             },
 
             .float => {
-                current += 1;
-                if (current < src.len and std.ascii.isDigit(src[current])) {
-                    continue :blk .float;
+                self.index += 1;
+                if (self.index < self.source.len and std.ascii.isDigit(self.at())) {
+                    continue :lexing .float;
                 }
-            }
+            },
+
+            .identifier => {
+                self.index += 1;
+                switch (self.at()) {
+                    'A'...'Z', 'a'...'z', '_' => {
+                        continue :lexing .identifier;
+                    },
+                    else => {
+                        const str = self.source[result.loc.start..self.index];
+                        if (Token.getKeyword(str)) |tag| {
+                            result.tag = tag;
+                        }
+                    },
+                }
+            },
         }
 
-        current += 1;
-
-        result.loc.end = current;
-        // todo handle these instead of bubbling
-        try tokens.append(result);
+        result.loc.end = self.index;
+        return result;
     }
 
-    try tokens.append(Token{
-        .tag = .eof,
-        .loc = .{ .start = current, .end = current, .line = line }
-    });
+    /// calls self.next() to fill `tokens`
+    /// always appends at least an eof token to `tokens`
+    pub fn collect(self: *Lexer, tokens: *std.ArrayList(Token)) !void {
+        while (self.next()) |token| {
+            try tokens.append(token);
+        }
+        try tokens.append(Token{ .tag = .eof, .loc = .{ .start = self.index, .end = self.index, .line = self.line } });
+    }
 
-    return tokens;
-}
+    /// consumes lexer into a `std.ArrayList(Token)`
+    /// the returned ArrayList always contains at least an eof token
+    pub fn collectAlloc(self: *Lexer, ally: Allocator) !std.ArrayList(Token) {
+        var tokens = std.ArrayList(Token).init(ally);
+        // todo dont just do this
+        errdefer tokens.deinit();
+
+        while (self.next()) |token| {
+            try tokens.append(token);
+        }
+        try tokens.append(Token{ .tag = .eof, .loc = .{ .start = self.index, .end = self.index, .line = self.line } });
+
+        return tokens;
+    }
+};
