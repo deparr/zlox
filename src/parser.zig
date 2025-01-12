@@ -20,9 +20,16 @@ pub const Parser = struct {
     tokens: std.ArrayList(Token),
     ally: Allocator,
     index: usize = 0,
+    err: Token.Loc = undefined,
 
     pub fn parse(self: *Parser) ParseError!*Expr {
-        return self.expression();
+        // this seems wrong
+        if (self.expression()) |tree| {
+            return tree;
+        } else |err| {
+            self.err = self.at().loc;
+            return err;
+        }
     }
 
     inline fn at(self: *Parser) Token {

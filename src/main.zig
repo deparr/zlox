@@ -60,10 +60,18 @@ pub fn main() !void {
             for (tokens.items) |tok| {
                 try stdout.print("{s}('{s}') .{{ start={d} end={d} }}\n", .{ @tagName(tok.tag), line[tok.loc.start..tok.loc.end], tok.loc.start, tok.loc.end });
             }
+            try bw.flush();
 
             var parser = Parser{ .tokens = tokens, .ally = ally };
 
-            const tree = try parser.parse();
+            const tree = parser.parse() catch |e| {
+                const err_state = parser.err;
+                try stdout.print("error: {s} at {d}:{d}:{d}: '{s}'\n", .{ @errorName(e), err_state.line, err_state.start, err_state.end, line[err_state.start..err_state.end] });
+                tokens.clearAndFree();
+                _ = try stdout.write(prompt);
+                try bw.flush();
+                continue;
+            };
             tree.walk();
             std.debug.print("\n", .{});
 
