@@ -24,7 +24,7 @@ pub const Expr = union(ExprTag) {
     literal: ?Value,
     unary: *UnaryExpr,
 
-    /// dump expr tree to stderr 
+    /// debug dump expr tree to stderr 
     pub fn walk(self: *Expr) void {
         const print = std.debug.print;
         switch (self.*) {
@@ -44,7 +44,8 @@ pub const Expr = union(ExprTag) {
                 if (val) |v| {
                     switch (v) {
                         .boolean => |b| print("{}", .{b}),
-                        else => unreachable,
+                        .number => |n| print("{d}", .{n}),
+                        .string => |s| print("\"{s}\"", .{s}),
                     }
                 } else {
                     print("nil", .{});

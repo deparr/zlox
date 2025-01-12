@@ -14,8 +14,8 @@ fn usage(invoked: [:0]u8) void {
     , .{invoked});
 }
 
-const prompt = "zlox> ";
 
+// todo clean up main, like, a lot
 pub fn main() !void {
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
@@ -43,6 +43,7 @@ pub fn main() !void {
         }
         try bw.flush();
     } else {
+        const prompt = "zlox> ";
         const stdin_file = std.io.getStdIn().reader();
         var br = std.io.bufferedReader(stdin_file);
         const stdin = br.reader();
@@ -62,7 +63,7 @@ pub fn main() !void {
             }
             try bw.flush();
 
-            var parser = Parser{ .tokens = tokens, .ally = ally };
+            var parser = Parser{ .tokens = tokens, .ally = ally, .src = line };
 
             const tree = parser.parse() catch |e| {
                 const err_state = parser.err;

@@ -14,11 +14,14 @@ pub const ParseError = error{
     UnexpectedToken,
     UnterminatedParen,
     OutOfMemory,
+    InvalidNumericLiteral,
 };
 
 pub const Parser = struct {
     tokens: std.ArrayList(Token),
     ally: Allocator,
+    // this also seems wrong
+    src: []const u8,
     index: usize = 0,
     err: Token.Loc = undefined,
 
@@ -171,7 +174,28 @@ pub const Parser = struct {
             Tag.keyword_false => val = expr.Value { .boolean = false },
             Tag.keyword_true => val = expr.Value { .boolean = true },
             Tag.keyword_nil => val = null,
-            Tag.number, Tag.string => unreachable, // todo update lexer to store literals
+            Tag.number => {
+                const loc = self.at().loc;
+                const str = self.src[loc.start..loc.end];
+                const number = std.fmt.parseFloat(f64, str) catch {
+                    self.err = loc;
+                    return ParseError.InvalidNumericLiteral;
+                };
+
+                val = expr.Value { .number = number };
+            },
+            Tag.string => {
+                const loc = self.at().loc;
+                // cut out quotes
+                // todo how to account for duplicate strings
+                // they should be collated at some point
+                const str = self.src[loc.start+1..loc.end-1];
+                // todo just copy it directly into the tree for now
+                const strcpy = try self.ally.alloc(u8, str.len);
+                @memcpy(strcpy, str);
+
+                val = expr.Value { .string = strcpy };
+            },
             Tag.left_paren => return self.grouping(),
             else => return ParseError.UnexpectedToken,
         }

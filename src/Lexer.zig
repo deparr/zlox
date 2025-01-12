@@ -73,7 +73,7 @@ pub const Token = struct {
         }
 
         pub fn lexeme(self: Tag) []const u8 {
-            return switch(self) {
+            return switch (self) {
                 .keyword_and => "and",
                 .keyword_class => "class",
                 .keyword_else => "else",
@@ -157,7 +157,6 @@ pub const Lexer = struct {
     pub fn init(src: []const u8) Lexer {
         return Lexer{ .source = src, .index = 0, .line = 1 };
     }
-
 
     pub fn atEnd(self: *Lexer) bool {
         return self.index >= self.source.len;
